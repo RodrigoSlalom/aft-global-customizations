@@ -1,10 +1,10 @@
 locals {
   # Format parameters into usable values if needed
   thumbprint     = data.aws_ssm_parameter.thumbprint.value
-  environments   = split(",", replace(data.aws_ssm_parameter.environment.value, " ", ""))
+  environments   = split(",", replace(data.aws_ssm_parameter.environments.value, " ", ""))
   repositories   = split(",", replace(data.aws_ssm_parameter.github_repos.value, " ", ""))
-  plan_policies  = split(",", replace(data.aws_ssm_parameter.policies.value, " ", ""))
-  apply_policies = split(",", replace(data.aws_ssm_parameter.policies.value, " ", ""))
+  plan_policies  = split(",", replace(data.aws_ssm_parameter.plan_policy.value, " ", ""))
+  apply_policies = split(",", replace(data.aws_ssm_parameter.apply_policy.value, " ", ""))
 
 }
 
@@ -32,7 +32,7 @@ resource "aws_iam_openid_connect_provider" "this" {
   client_id_list = [
     "sts.amazonaws.com",
   ]
-  thumbprint_list = [ local.thumbprint ]
+  thumbprint_list = [ ]
   url             = "https://token.actions.githubusercontent.com"
   # tags            = var.tags
 }
@@ -40,8 +40,8 @@ resource "aws_iam_openid_connect_provider" "this" {
 resource "aws_iam_role" "terraform_plan" {
   name                 = "github-role-plan"
   description          = "Role created by AFT for Github OIDC Connector"
-  max_session_duration = 60
-  assume_role_policy   = data.aws_iam_policy_document.this.json
+  max_session_duration = 3600
+  assume_role_policy   = data.aws_iam_policy_document.assume_role.json
   # tags                 = var.tags
   # path                  = var.iam_role_path
   # permissions_boundary  = var.iam_role_permissions_boundary
@@ -49,12 +49,12 @@ resource "aws_iam_role" "terraform_plan" {
 
   tags = {
     Repositories = join(",", local.repositories)
-    Environment  = each.key
+    Environment  = join(",", local.environments)
   }
 }
 
 resource "aws_iam_role_policy_attachment" "attach_plan_policies" {
-  for_each = toset(local.plan_policies)
+  for_each = toset(nonsensitive(local.plan_policies))
 
   policy_arn = each.key
   role       = aws_iam_role.terraform_plan.name
@@ -89,7 +89,7 @@ data "aws_iam_policy_document" "assume_role" {
     }
 
     principals {
-      identifiers = aws_iam_openid_connect_provider.this.arn
+      identifiers = [ aws_iam_openid_connect_provider.this.arn ]
       type        = "Federated"
     }
   }
