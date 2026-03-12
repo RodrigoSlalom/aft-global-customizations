@@ -6,7 +6,33 @@ locals {
   plan_policies  = split(",", replace(data.aws_ssm_parameter.plan_policy.value, " ", ""))
   apply_policies = split(",", replace(data.aws_ssm_parameter.apply_policy.value, " ", ""))
 
+  terraform_statefile_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket"
+        ]
+        Resource = [
+          "arn:aws:s3:::github-terraform-statefile-533267049743"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:DeleteObject"
+        ]
+        Resource = [
+          "arn:aws:s3:::github-terraform-statefile-533267049743/*"
+        ]
+      },
+    ]
+  })
 }
+
 
 # Data 
 data "aws_ssm_parameter" "github_repos" {
@@ -37,6 +63,31 @@ resource "aws_iam_openid_connect_provider" "this" {
   # tags            = var.tags
 }
 
+resource "aws_iam_role" "terraform_apply" {
+  name                 = "github-role-apply"
+  description          = "Role created by AFT for Github OIDC Connector"
+  max_session_duration = 3600
+  assume_role_policy   = data.aws_iam_policy_document.assume_role.json
+  # tags                 = var.tags
+  # path                  = var.iam_role_path
+  # permissions_boundary  = var.iam_role_permissions_boundary
+  depends_on = [aws_iam_openid_connect_provider.this]
+
+  tags = {
+    Repositories = join(",", local.repositories)
+    Environment  = join(",", local.environments)
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "attach_apply_policies" {
+  for_each = toset(nonsensitive(local.apply_policies))
+
+  policy_arn = each.key
+  role       = aws_iam_role.terraform_apply.name
+
+  depends_on = [aws_iam_role.terraform_apply]
+}
+
 resource "aws_iam_role" "terraform_plan" {
   name                 = "github-role-plan"
   description          = "Role created by AFT for Github OIDC Connector"
@@ -60,6 +111,19 @@ resource "aws_iam_role_policy_attachment" "attach_plan_policies" {
   role       = aws_iam_role.terraform_plan.name
 
   depends_on = [aws_iam_role.terraform_plan]
+}
+
+resource "aws_iam_role_policy" "s3_access_apply" {
+  name = "S3Access"
+  role = aws_iam_role.terraform_apply.id
+
+  policy = local.terraform_statefile_policy
+}
+resource "aws_iam_role_policy" "s3_access_plan" {
+  name = "S3Access"
+  role = aws_iam_role.terraform_apply.id
+
+  policy = local.terraform_statefile_policy
 }
 
 data "aws_iam_policy_document" "assume_role" {
