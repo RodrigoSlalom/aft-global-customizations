@@ -121,7 +121,7 @@ resource "aws_iam_role_policy" "s3_access_apply" {
 }
 resource "aws_iam_role_policy" "s3_access_plan" {
   name = "S3Access"
-  role = aws_iam_role.terraform_apply.id
+  role = aws_iam_role.terraform_plan.id
 
   policy = local.terraform_statefile_policy
 }
