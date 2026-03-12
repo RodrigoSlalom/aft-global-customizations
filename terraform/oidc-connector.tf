@@ -60,10 +60,6 @@ resource "aws_iam_openid_connect_provider" "this" {
   ]
   url             = "https://token.actions.githubusercontent.com"
   # tags            = var.tags
-
-  lifecycle {
-    ignore_changes = [ thumbprint ]
-  }
 }
 
 resource "aws_iam_role" "terraform_apply" {
